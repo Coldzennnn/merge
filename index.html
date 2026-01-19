@@ -122,15 +122,58 @@
         .btn-accept { flex: 1; padding: 10px; border: none; border-radius: 5px; background: #00AA00; color: white; font-weight: bold; cursor: pointer; text-transform: uppercase; border: 2px solid #005500; }
         .btn-decline { flex: 1; padding: 10px; border: none; border-radius: 5px; background: #555; color: #AAA; font-weight: bold; cursor: pointer; text-transform: uppercase; border: 2px solid #333; }
 
-        /* Setup & Battle UI */
-        .battle-header { font-family: 'Arial Black', sans-serif; font-size: clamp(24px, 6vw, 40px); color: #FFA500; text-transform: uppercase; margin-bottom: 10px; text-shadow: 2px 2px 0 #000; text-align: center; }
-        .setup-arena { display: flex; width: 95%; max-width: 800px; height: 60%; border: 2px solid #444; background: #222; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
-        .side { flex: 1; padding: 5px; display: flex; flex-direction: column; align-items: center; overflow-y: auto; }
+        /* Setup & Battle UI - REFACTORED FOR RESPONSIVENESS */
+        .battle-header { 
+            font-family: 'Arial Black', sans-serif; 
+            font-size: clamp(20px, 5vw, 40px); 
+            color: #FFA500; 
+            text-transform: uppercase; 
+            margin-bottom: 10px; 
+            text-shadow: 2px 2px 0 #000; 
+            text-align: center; 
+            flex-shrink: 0;
+        }
+        .setup-arena { 
+            display: flex; 
+            width: 95%; 
+            max-width: 800px; 
+            height: 60vh; /* Responsive Height */
+            max-height: 500px;
+            border: 2px solid #444; 
+            background: #222; 
+            border-radius: 10px; 
+            overflow: hidden; 
+            margin-bottom: 20px; 
+            flex-direction: row; /* Force row layout */
+        }
+        .side { 
+            flex: 1; 
+            padding: 5px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            overflow-y: auto; /* Scrollable list */
+            overflow-x: hidden;
+        }
         .side.enemy { background: #2C0000; border-left: 2px solid #444; }
         .side.player { background: #111; }
         .side-title { font-size: clamp(14px, 4vw, 18px); margin-bottom: 10px; color: #AAA; text-align: center; font-weight: bold; text-shadow: 1px 1px 0 #000; }
 
-        .unit-card { width: clamp(50px, 12vw, 80px); height: clamp(70px, 16vw, 100px); background: #333; margin: 3px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; cursor: pointer; position: relative; flex-shrink: 0;}
+        .unit-card { 
+            width: clamp(50px, 12vw, 80px); 
+            height: clamp(70px, 16vw, 100px); 
+            background: #333; 
+            margin: 3px; 
+            border-radius: 8px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            border: 2px solid transparent; 
+            cursor: pointer; 
+            position: relative; 
+            flex-shrink: 0;
+        }
         .unit-card.selected { border-color: #00FF00; background: #003300; box-shadow: 0 0 10px #00FF00; }
         .unit-card.mystery { background: #1a1a1a; border: 2px dashed #555; color: #555; font-size: 30px; font-weight: bold; cursor: default; }
         .unit-body { width: 50%; height: 50%; border-radius: 10px; border: 2px solid black; position: relative; margin-bottom: 5px; }
@@ -139,6 +182,14 @@
         .action-btn { padding: 15px 40px; font-size: 24px; background: #FF0000; color: white; border: 2px solid #500; border-radius: 5px; cursor: pointer; text-transform: uppercase; font-weight: bold; box-shadow: 0 4px 0 #500; }
         .action-btn:active { box-shadow: 0 2px 0 #500; transform: translateY(2px); }
         .action-btn:disabled { background: #555; border-color: #333; box-shadow: none; cursor: not-allowed; opacity: 0.5; transform: none; }
+
+        /* Media Query for Landscape Mobile / Short Screens */
+        @media (max-height: 500px) {
+            .setup-arena { height: 50vh; margin-bottom: 10px; }
+            .unit-card { transform: scale(0.85); margin: 1px; }
+            .battle-header { font-size: 20px; margin-bottom: 5px; }
+            .action-btn { padding: 8px 30px; font-size: 18px; }
+        }
 
         #playerSquadList, #enemyContainer { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; align-content: flex-start; }
 
@@ -452,22 +503,55 @@
     document.getElementById('fightBtn').onclick = () => { if(gameState.selectedUnitIds.length > 0) { soundManager.playClick(); document.getElementById('battleSetupOverlay').style.display='none'; initBattleMode(); } };
 
     function initBattleMode() {
-        gameState.mode = 'BATTLE'; battleState.projectiles = []; battleState.deadUnitIds = [];
-        renderState.stars = []; for(let i=0; i<50; i++) renderState.stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, size: Math.random()*2+1});
+        gameState.mode = 'BATTLE'; 
+        battleState.projectiles = []; 
+        battleState.deadUnitIds = [];
+        renderState.stars = []; 
+        
+        // Logical Canvas Dimensions
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+
+        // Dynamic Unit Size (15% height, max 80px)
+        const unitSize = Math.min(80, h * 0.15);
+        battleState.unitSize = unitSize;
+
+        for(let i=0; i<50; i++) renderState.stars.push({x: Math.random()*w, y: Math.random()*h, size: Math.random()*2+1});
+        
+        // Calculate Dynamic Spacing
+        const playerTeamSize = gameState.selectedUnitIds.length;
+        const enemyTeamSize = gameState.enemySquad.length;
+        
+        const spacingY_P = h / (playerTeamSize + 1);
+        const spacingY_E = h / (enemyTeamSize + 1);
+
         battleState.playerTeam = gameState.selectedUnitIds.map((id, i) => {
             const u = gameState.units.find(x => x.id === id); const s = getStats(u.level);
-            return { originalId: id, level: u.level, hp: s.hp, maxHp: s.hp, dmg: s.dmg, x: 100, y: 0, baseX: 100, team: 'player' };
+            return { 
+                originalId: id, 
+                level: u.level, 
+                hp: s.hp, maxHp: s.hp, dmg: s.dmg, 
+                x: w * 0.15, 
+                y: (i + 1) * spacingY_P, 
+                team: 'player' 
+            };
         });
         battleState.enemyTeam = gameState.enemySquad.map((u, i) => {
             const s = getStats(u.level);
-            return { originalId: `enemy_${i}`, level: u.level, hp: s.hp, maxHp: s.hp, dmg: s.dmg, x: canvas.width - 100, y: 0, baseX: canvas.width - 100, team: 'enemy' };
+            return { 
+                originalId: `enemy_${i}`, 
+                level: u.level, 
+                hp: s.hp, maxHp: s.hp, dmg: s.dmg, 
+                x: w * 0.85, 
+                y: (i + 1) * spacingY_E, 
+                team: 'enemy' 
+            };
         });
-        const pH = Math.max(battleState.playerTeam.length * 80, 200); const pY = (canvas.height - pH) / 2 + 40;
-        battleState.playerTeam.forEach((u, i) => { u.y = pY + i * 80; });
-        const eH = Math.max(battleState.enemyTeam.length * 80, 200); const eY = (canvas.height - eH) / 2 + 40;
-        battleState.enemyTeam.forEach((u, i) => { u.y = eY + i * 80; });
-        battleState.phase = 'INIT'; battleState.phaseTimer = 1.0; 
+        
+        battleState.phase = 'INIT'; 
+        battleState.phaseTimer = 1.0; 
     }
+    
     function updateBattle(dt) {
         for (let i = battleState.projectiles.length - 1; i >= 0; i--) {
             const p = battleState.projectiles[i];
@@ -694,10 +778,26 @@
             ctx.fillStyle = '#0b0d17'; ctx.fillRect(0,0,w,h);
             ctx.fillStyle = '#FFF'; renderState.stars.forEach(s => { ctx.globalAlpha=Math.random()*0.5+0.5; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI*2); ctx.fill(); }); ctx.globalAlpha=1;
             
+            const unitSize = battleState.unitSize || 60; // Use dynamic size
+
             [...battleState.playerTeam, ...battleState.enemyTeam].forEach(u => {
                 if(u.hp <= 0) return;
-                const hpPct = u.hp/u.maxHp; ctx.fillStyle = '#333'; ctx.fillRect(u.x-20, u.y-50, 40, 6); ctx.fillStyle = hpPct>0.5?'#0F0':'#F00'; ctx.fillRect(u.x-20, u.y-50, 40*hpPct, 6);
-                ctx.save(); ctx.translate(u.x, u.y); if(u.team === 'enemy') ctx.scale(-1, 1); drawCharacter(ctx, 0, 0, 60, u.level); ctx.restore();
+                
+                // Draw Health Bar relative to unit position and size
+                const hpPct = u.hp/u.maxHp; 
+                const barW = unitSize * 0.8;
+                const barH = Math.max(4, unitSize * 0.1);
+                const barY = -unitSize * 0.6; // Above unit
+
+                ctx.fillStyle = '#333'; ctx.fillRect(u.x - barW/2, u.y + barY, barW, barH); 
+                ctx.fillStyle = hpPct>0.5?'#0F0':'#F00'; ctx.fillRect(u.x - barW/2, u.y + barY, barW*hpPct, barH);
+                
+                // Draw Unit
+                ctx.save(); 
+                ctx.translate(u.x, u.y); 
+                if(u.team === 'enemy') ctx.scale(-1, 1); 
+                drawCharacter(ctx, 0, 0, unitSize, u.level); 
+                ctx.restore();
             });
             battleState.projectiles.forEach(p => { ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill(); ctx.shadowColor=p.color; ctx.shadowBlur=10; ctx.stroke(); ctx.shadowBlur=0; });
         
@@ -884,7 +984,7 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) { gameState.paused = true; if(soundManager.ctx) soundManager.ctx.suspend(); yandexManager.gameplayStop(); } else { gameState.paused = false; if(!soundManager.muted && soundManager.ctx) soundManager.ctx.resume(); yandexManager.gameplayStart(); } });
     function saveGame() { localStorage.setItem('amg_save', JSON.stringify({ coins: gameState.coins, maxLevel: gameState.maxLevel, units: gameState.units.map(u => ({level: u.level, slotIndex: u.slotIndex})) })); }
     function loadGame() { try { const d = JSON.parse(localStorage.getItem('amg_save')); if(d) { gameState.coins=d.coins||0; gameState.maxLevel=d.maxLevel||1; gameState.units=(d.units||[]).map(u=>({id:Date.now()+Math.random(), level:u.level, slotIndex:u.slotIndex, x:0, y:0, isDragging:false, animScale:1})); } } catch(e){} }
-    if (!CanvasRenderingContext2D.prototype.roundRect) { CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) { if (w<2*r) r=w/2; if(h<2*r) r=h/2; this.beginPath(); this.moveTo(x+r, y); this.arcTo(x+w, y, x+w, y+h, r); this.arcTo(x+w, y+h, x, y+h, r); this.arcTo(x, y+h, x, y, r); this.arcTo(x, y, x+w, y, r); this.closePath(); return this; }; }
+    if (!CanvasRenderingContext2D.prototype.roundRect) { CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) { if (w<2*r) r=w/2; if(h<2*r) r=h/2; this.beginPath(); this.moveTo(x+r, y); this.arcTo(x+w, y, x+w, y+h, r); this.arcTo(x+w, y+h, x, y+h, r); this.arcTo(x+w, y+h, x, y+h, r); this.arcTo(x, y+h, x, y, r); this.arcTo(x, y, x+w, y, r); this.closePath(); return this; }; }
 
     // --- MAIN INITIALIZATION SEQUENCE ---
     window.onload = async () => {
