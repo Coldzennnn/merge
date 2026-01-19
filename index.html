@@ -185,10 +185,29 @@
 
         /* Media Query for Landscape Mobile / Short Screens */
         @media (max-height: 500px) {
-            .setup-arena { height: 50vh; margin-bottom: 10px; }
-            .unit-card { transform: scale(0.85); margin: 1px; }
-            .battle-header { font-size: 20px; margin-bottom: 5px; }
-            .action-btn { padding: 8px 30px; font-size: 18px; }
+            .setup-arena { 
+                height: 65vh !important; /* Force 65% height */
+                margin-bottom: 5px; 
+            }
+            .unit-card { 
+                width: 50px !important;
+                height: 70px !important;
+                margin: 2px !important;
+                transform: none !important; /* Remove clamp transform logic if any */
+            }
+            .battle-header { 
+                font-size: 18px !important; 
+                margin-bottom: 2px; 
+            }
+            .action-btn { 
+                padding: 5px 20px !important; 
+                font-size: 16px !important; 
+                margin-top: 2px;
+            }
+            /* Ensure text fits */
+            .side-title { font-size: 12px !important; margin-bottom: 2px; }
+            .unit-card .unit-body { margin-bottom: 2px; }
+            .unit-card div { font-size: 9px !important; }
         }
 
         #playerSquadList, #enemyContainer { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; align-content: flex-start; }
@@ -428,6 +447,12 @@
     function calculatePower(level) { return 10 * Math.pow(2, level - 1); }
     function formatNumber(num) { if (num>=1000000) return (num/1000000).toFixed(1)+'M'; if(num>=1000) return (num/1000).toFixed(1)+'k'; return Math.floor(num).toString(); }
     function getUnitColor(level) { return CONFIG.UNIT_COLORS[(level - 1) % CONFIG.UNIT_COLORS.length]; }
+    
+    // NEW: Centralized Reward Logic
+    function getAdRewardAmount() {
+        return Math.floor(200 * Math.pow(1.5, gameState.maxLevel));
+    }
+
     function getSmartShopState() {
         const targetLevel = Math.max(1, gameState.maxLevel - 3);
         const counts = {}; gameState.units.forEach(u => { counts[u.level] = (counts[u.level] || 0) + 1; });
@@ -502,6 +527,7 @@
     }
     document.getElementById('fightBtn').onclick = () => { if(gameState.selectedUnitIds.length > 0) { soundManager.playClick(); document.getElementById('battleSetupOverlay').style.display='none'; initBattleMode(); } };
 
+    // --- REWRITTEN BATTLE INITIALIZATION (Responsive) ---
     function initBattleMode() {
         gameState.mode = 'BATTLE'; 
         battleState.projectiles = []; 
@@ -512,41 +538,49 @@
         const w = window.innerWidth;
         const h = window.innerHeight;
 
-        // Dynamic Unit Size (15% height, max 80px)
-        const unitSize = Math.min(80, h * 0.15);
+        // 1. Calculate Unit Size based on screen percent
+        // Min 30px, Max 80px, Target 12% width or 15% height
+        const unitSize = Math.max(30, Math.min(80, Math.min(w * 0.12, h * 0.15)));
         battleState.unitSize = unitSize;
 
         for(let i=0; i<50; i++) renderState.stars.push({x: Math.random()*w, y: Math.random()*h, size: Math.random()*2+1});
         
-        // Calculate Dynamic Spacing
-        const playerTeamSize = gameState.selectedUnitIds.length;
-        const enemyTeamSize = gameState.enemySquad.length;
-        
-        const spacingY_P = h / (playerTeamSize + 1);
-        const spacingY_E = h / (enemyTeamSize + 1);
+        const spacing = 10; // Margin between units in pixels
 
-        battleState.playerTeam = gameState.selectedUnitIds.map((id, i) => {
-            const u = gameState.units.find(x => x.id === id); const s = getStats(u.level);
-            return { 
-                originalId: id, 
-                level: u.level, 
-                hp: s.hp, maxHp: s.hp, dmg: s.dmg, 
-                x: w * 0.15, 
-                y: (i + 1) * spacingY_P, 
-                team: 'player' 
-            };
-        });
-        battleState.enemyTeam = gameState.enemySquad.map((u, i) => {
-            const s = getStats(u.level);
-            return { 
-                originalId: `enemy_${i}`, 
-                level: u.level, 
-                hp: s.hp, maxHp: s.hp, dmg: s.dmg, 
-                x: w * 0.85, 
-                y: (i + 1) * spacingY_E, 
-                team: 'enemy' 
-            };
-        });
+        // Helper to position a team vertically distributed
+        const positionTeam = (squad, xPos, isEnemy) => {
+            const count = squad.length;
+            if (count === 0) return [];
+
+            // Total height of the squad block
+            const totalH = count * unitSize + (count - 1) * spacing;
+            
+            // Start Y to center the block
+            const startY = (h - totalH) / 2;
+
+            return squad.map((u, i) => {
+                // Handle both config objects (enemy) and real units (player)
+                const lvl = u.level;
+                const stats = getStats(lvl);
+                
+                return { 
+                    originalId: u.id || `enemy_${i}`, 
+                    level: lvl, 
+                    hp: stats.hp, maxHp: stats.hp, dmg: stats.dmg, 
+                    x: xPos, 
+                    // Calculate Y based on startY + offset. Add unitSize/2 for center anchor if drawing centered
+                    y: startY + i * (unitSize + spacing) + (unitSize / 2), 
+                    team: isEnemy ? 'enemy' : 'player' 
+                };
+            });
+        };
+
+        // Player Team Setup
+        const playerUnits = gameState.selectedUnitIds.map(id => gameState.units.find(x => x.id === id)).filter(u => u);
+        battleState.playerTeam = positionTeam(playerUnits, w * 0.15, false);
+
+        // Enemy Team Setup
+        battleState.enemyTeam = positionTeam(gameState.enemySquad, w * 0.85, true);
         
         battleState.phase = 'INIT'; 
         battleState.phaseTimer = 1.0; 
@@ -776,6 +810,13 @@
         if (gameState.mode === 'BATTLE') {
             // Battle rendering (simplified)
             ctx.fillStyle = '#0b0d17'; ctx.fillRect(0,0,w,h);
+            
+            // --- DEBUG: BATTLE ZONE (Red Border) ---
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(w * 0.05, h * 0.05, w * 0.9, h * 0.9);
+            // ---------------------------------------
+
             ctx.fillStyle = '#FFF'; renderState.stars.forEach(s => { ctx.globalAlpha=Math.random()*0.5+0.5; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI*2); ctx.fill(); }); ctx.globalAlpha=1;
             
             const unitSize = battleState.unitSize || 60; // Use dynamic size
@@ -787,7 +828,8 @@
                 const hpPct = u.hp/u.maxHp; 
                 const barW = unitSize * 0.8;
                 const barH = Math.max(4, unitSize * 0.1);
-                const barY = -unitSize * 0.6; // Above unit
+                // Position bar above the centered unit
+                const barY = -unitSize * 0.6; 
 
                 ctx.fillStyle = '#333'; ctx.fillRect(u.x - barW/2, u.y + barY, barW, barH); 
                 ctx.fillStyle = hpPct>0.5?'#0F0':'#F00'; ctx.fillRect(u.x - barW/2, u.y + barY, barW*hpPct, barH);
@@ -796,6 +838,8 @@
                 ctx.save(); 
                 ctx.translate(u.x, u.y); 
                 if(u.team === 'enemy') ctx.scale(-1, 1); 
+                
+                // Note: drawCharacter draws centered on 0,0, which matches our new logic
                 drawCharacter(ctx, 0, 0, unitSize, u.level); 
                 ctx.restore();
             });
@@ -843,6 +887,7 @@
                     drawStrokedText(`${formatNumber(cost)}$`, btn.x, btn.y + btn.r * 0.35, btn.r * 0.45, can?'#FFF':'#AAA');
                 } 
                 else if(btn.id === 'ad') {
+                    // MAIN BUTTON
                     ctx.fillStyle = btn.color; ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.fill(); 
                     ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2; ctx.stroke();
                     
@@ -855,6 +900,46 @@
                     ctx.font = `900 ${btn.r * 0.35}px "Arial Black", Verdana`;
                     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
                     ctx.fillText(t.AD_BTN, btn.x, btn.y + btn.r * 0.4);
+
+                    // --- NEW: REWARD PREVIEW BUBBLE ---
+                    // Shows exactly what the user gets ("+5.5k$")
+                    const rewardVal = getAdRewardAmount();
+                    const rewardText = `+${formatNumber(rewardVal)}$`;
+
+                    // Pulse animation for the label to grab attention
+                    const time = Date.now() / 300;
+                    const scale = 1 + Math.sin(time) * 0.05; // Gentle pulse
+                    const offset = Math.sin(time * 2) * 3; // Gentle float
+
+                    ctx.save();
+                    // Position above the button
+                    ctx.translate(btn.x, btn.y - btn.r * 1.2 + offset); 
+                    ctx.scale(scale, scale);
+
+                    // Label Background (Green Pill)
+                    // Scale font based on button radius so it works on mobile
+                    ctx.font = `bold ${btn.r * 0.4}px "Arial Black"`;
+                    const metrics = ctx.measureText(rewardText);
+                    const padX = 10;
+                    const padY = 4;
+                    const badgeW = metrics.width + (padX * 2);
+                    const badgeH = (btn.r * 0.4) + (padY * 2);
+
+                    ctx.fillStyle = '#00AA00'; // Dark Green for Money
+                    ctx.beginPath();
+                    ctx.roundRect(-badgeW/2, -badgeH/2, badgeW, badgeH, 10);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Label Text
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(rewardText, 0, 0);
+
+                    ctx.restore();
                 } 
                 else if(btn.id === 'settings') {
                     ctx.fillStyle = '#777'; ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.fill();
@@ -926,7 +1011,8 @@
                 else if(btn.id==='buy') spawnUnit();
                 else if(btn.id==='ad') {
                     yandexManager.showRewarded(() => { 
-                        const r = Math.floor(200*Math.pow(1.5, gameState.maxLevel)); 
+                        // Use unified reward logic
+                        const r = getAdRewardAmount();
                         gameState.coins += r; 
                         spawnFloatingText(canvas.width/2/window.devicePixelRatio, canvas.height/2/window.devicePixelRatio, `+${formatNumber(r)}$`, '#FFD700', 30); 
                         soundManager.playWin(); 
