@@ -313,7 +313,11 @@
         unmuteFromAd() { if (this.ctx && !this.muted) this.ctx.resume(); }
 
         updateGain() {
-            this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.3, this.ctx.currentTime);
+            // Mobile speakers need max volume (1.0), Desktop is too loud above 0.4
+            const isMobile = window.innerWidth < 800 || (navigator.maxTouchPoints > 0);
+            const volume = isMobile ? 1.0 : 0.4;
+            
+            this.masterGain.gain.setValueAtTime(this.muted ? 0 : volume, this.ctx.currentTime);
         }
 
         checkContext() {
