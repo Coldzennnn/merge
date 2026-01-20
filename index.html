@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Among Us Merge: Final Release</title>
+    <title>Эволюция: Амонг Ас</title>
 
-    <script src="/sdk.js"></script>
+    <script src="https://yandex.ru/games/sdk/v2"></script>
 
     <style>
         /* 1. GLOBAL RESET & MOBILE OPTIMIZATION */
@@ -20,6 +20,8 @@
             -ms-user-select: none;
             user-select: none;
             touch-action: none;
+            -webkit-user-drag: none;
+            user-drag: none;
         }
 
         body, html {
@@ -38,6 +40,9 @@
             width: 100%;
             height: 100%;
             touch-action: none;
+            -webkit-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
         }
 
         /* --- UI OVERLAYS --- */
@@ -53,7 +58,7 @@
             flex-direction: column;
         }
 
-        /* Rotate Overlay (New) */
+        /* Rotate Overlay */
         #rotateOverlay {
             background: rgba(0, 0, 0, 0.95);
             z-index: 99999;
@@ -222,14 +227,12 @@
 
     <canvas id="gameCanvas"></canvas>
 
-    <!-- NEW ROTATE OVERLAY -->
     <div id="rotateOverlay" class="overlay">
         <div class="phone-icon"></div>
         <div id="rotateMsg">Please rotate your device</div>
     </div>
 
     <div id="loadingOverlay" class="overlay">
-        <!-- Added ID for localization -->
         <h1 id="loadingText" style="color: #666; font-size: 24px; font-family: 'Arial Black';">LOADING...</h1>
     </div>
 
@@ -251,15 +254,12 @@
             <div class="side player">
                 <div class="side-title"><span id="squadTitle">Your Squad</span> <span id="squadCount" style="color:#0F0">(0/5)</span></div>
                 <div id="playerSquadList"></div>
-                <!-- Added ID for Power Label -->
                 <div style="margin-top:10px; font-size: 14px; color: #8F8; font-weight: bold; text-shadow: 1px 1px 0 #000;"><span id="squadPowerLabel">Power</span>: <span id="squadPower">0</span></div>
             </div>
             <div class="side enemy">
                 <div class="side-title" id="enemyTitle">Hidden Enemy</div>
-                <!-- Added ID for Hidden Label -->
                 <div id="hiddenLabel" style="color: #FF5555; font-size: 12px; margin-bottom: 5px; letter-spacing: 1px; font-weight: bold;">OPPONENT HIDDEN</div>
                 <div id="enemyContainer"></div>
-                <!-- Added ID for Power Label -->
                 <div style="margin-top:10px; font-size: 14px; color: #F88; font-weight: bold; text-shadow: 1px 1px 0 #000;"><span id="enemyPowerLabel">Power</span>: <span id="enemyPower">???</span></div>
             </div>
         </div>
@@ -278,9 +278,34 @@
 
 <script>
     // 1. INPUT BLOCKING & UTILS
+    
+    // Prevent all default context menu behaviors
     window.addEventListener('contextmenu', e => { e.preventDefault(); return false; }, { passive: false });
     window.addEventListener('selectstart', e => { e.preventDefault(); return false; }, { passive: false });
     window.addEventListener('dragstart', e => { e.preventDefault(); return false; }, { passive: false });
+    
+    // Prevent long-press context menu on mobile
+    let longPressTimer = null;
+    document.addEventListener('touchstart', e => {
+        longPressTimer = setTimeout(() => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, 500);
+    }, { passive: false });
+    
+    document.addEventListener('touchend', () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    }, { passive: false });
+    
+    document.addEventListener('touchmove', () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    }, { passive: false });
     
     // Prevent default touch behaviors but DO NOT block the canvas touchstart logic
     document.addEventListener('touchstart', e => {
@@ -313,10 +338,8 @@
         unmuteFromAd() { if (this.ctx && !this.muted) this.ctx.resume(); }
 
         updateGain() {
-            // Mobile speakers need max volume (1.0), Desktop is too loud above 0.4
             const isMobile = window.innerWidth < 800 || (navigator.maxTouchPoints > 0);
             const volume = isMobile ? 1.0 : 0.4;
-            
             this.masterGain.gain.setValueAtTime(this.muted ? 0 : volume, this.ctx.currentTime);
         }
 
@@ -379,9 +402,17 @@
         }
     }
 
-    // 3. YANDEX SDK MANAGER
+    // 3. YANDEX SDK MANAGER (С новой логикой рекламы)
     class YandexManager {
-        constructor() { this.ysdk = null; this.lang = 'en'; this.isMock = false; }
+        constructor() { 
+            this.ysdk = null; 
+            this.lang = 'en'; 
+            this.isMock = false; 
+            
+            // Таймеры для рекламы
+            this.sessionStart = Date.now(); // Время старта игры
+            this.lastAdTime = Date.now();   // Время последнего показа рекламы
+        }
 
         async init() {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SDK Timeout")), 2000));
@@ -402,12 +433,14 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlLang = urlParams.get('lang');
                 const envLang = this.ysdk.environment.i18n.lang;
-                this.lang = ['ru', 'be', 'kk', 'uk', 'uz'].includes(urlLang || envLang) ? 'ru' : 'en';
+                const sdkLang = ['ru', 'be', 'kk', 'uk', 'uz'].includes(urlLang || envLang) ? 'ru' : 'en';
+                this.lang = sdkLang;
+                gameState.lang = sdkLang;
             } catch (e) {
                 console.warn("SDK Failed. Mock Mode.");
-                this.isMock = true; this.lang = 'ru';
+                this.isMock = true; 
+                this.lang = gameState.lang;
             }
-            gameState.lang = this.lang;
         }
 
         notifyGameReady() {
@@ -419,14 +452,43 @@
         gameplayStart() { if (this.ysdk && this.ysdk.features.GameplayAPI) this.ysdk.features.GameplayAPI.start(); }
         gameplayStop() { if (this.ysdk && this.ysdk.features.GameplayAPI) this.ysdk.features.GameplayAPI.stop(); }
 
+        // Проверка таймера для автоматического показа рекламы (3 минуты)
+        checkAutoAd() {
+            // 1. Не показывать в первые 90 секунд
+            if (Date.now() - this.sessionStart < 90000) return;
+
+            // 2. Таймер 3 минуты (180000 мс) с последнего показа
+            if (Date.now() - this.lastAdTime > 180000) {
+                this.showInterstitial();
+            }
+        }
+
         showInterstitial(cb) {
+            // Глобальная блокировка на первые 90 секунд сессии
+            if (Date.now() - this.sessionStart < 90000 && !this.isMock) {
+                if(cb) cb(); 
+                return;
+            }
+
             if (this.isMock) { if(cb) cb(); return; }
+            
             this.gameplayStop();
             this.ysdk.adv.showFullscreenAdv({ 
                 callbacks: { 
                     onOpen: () => { soundManager.muteForAd(); },
-                    onClose: () => { soundManager.unmuteFromAd(); this.gameplayStart(); if (cb) cb(); }, 
-                    onError: () => { soundManager.unmuteFromAd(); this.gameplayStart(); if (cb) cb(); } 
+                    onClose: () => { 
+                        soundManager.unmuteFromAd(); 
+                        this.gameplayStart(); 
+                        this.lastAdTime = Date.now(); // Сброс таймера
+                        if (cb) cb(); 
+                    }, 
+                    onError: () => { 
+                        soundManager.unmuteFromAd(); 
+                        this.gameplayStart(); 
+                        // Даже при ошибке сбрасываем, чтобы не спамить
+                        this.lastAdTime = Date.now(); 
+                        if (cb) cb(); 
+                    } 
                 } 
             });
         }
@@ -471,7 +533,13 @@
 
     const NICKNAMES = ["Shadow", "Viper", "Ghost", "MadMax", "Cyber", "Wolf", "Storm", "Pro", "Speed", "Doom", "Alpha", "Venom", "Kratos", "Loki", "Zero"];
     
-    // --- 1. THE COMPLETE DICTIONARY ---
+    function detectLanguageEarly() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlLang = urlParams.get('lang');
+        const browserLang = navigator.language ? navigator.language.slice(0, 2) : 'en';
+        return ['ru', 'be', 'kk', 'uk', 'uz'].includes(urlLang || browserLang) ? 'ru' : 'en';
+    }
+    
     const TRANSLATION = {
         en: {
             LOADING: "LOADING...",
@@ -483,27 +551,22 @@
             SOUND: "Sound",
             LANG: "Language",
             ROTATE: "Please rotate your device",
-            // Challenge
             CHALLENGE: "CHALLENGE!",
             ACCEPT: "FIGHT",
             DECLINE: "FLEE",
-            // Battle Setup
             PREPARE: "PREPARE SQUAD",
             SQUAD: "Your Squad",
             ENEMY: "Hidden Enemy",
             HIDDEN: "OPPONENT HIDDEN",
             POWER: "Power",
             FIGHT_BTN: "ATTACK",
-            // Battle Result
             WIN: "VICTORY!",
             LOSE: "DEFEAT",
             REWARD: "Reward",
             FALLEN: "Fallen Heroes:",
             CONTINUE: "CONTINUE",
-            // Floating Text
             NO_MONEY: "Not enough money!",
             MAX_LVL: "Max Level!",
-            // New Keys
             CRIT: "CRIT!",
             UNITS_LOST: "units"
         },
@@ -517,33 +580,28 @@
             SOUND: "Звук",
             LANG: "Язык",
             ROTATE: "Переверните устройство",
-            // Challenge
             CHALLENGE: "ВЫЗОВ!",
             ACCEPT: "В БОЙ",
             DECLINE: "СБЕЖАТЬ",
-            // Battle Setup
             PREPARE: "ВЫБОР ОТРЯДА",
             SQUAD: "Ваш отряд",
             ENEMY: "Враг",
             HIDDEN: "СКРЫТЫЙ ПРОТИВНИК",
             POWER: "Сила",
             FIGHT_BTN: "В АТАКУ",
-            // Battle Result
             WIN: "ПОБЕДА!",
             LOSE: "ПОРАЖЕНИЕ",
             REWARD: "Награда",
             FALLEN: "Потери:",
             CONTINUE: "ДАЛЕЕ",
-            // Floating Text
             NO_MONEY: "Мало денег!",
             MAX_LVL: "Макс. уровень!",
-            // New Keys
             CRIT: "КРИТ!",
             UNITS_LOST: "ед."
         }
     };
 
-    let gameState = { mode: 'MERGE', coins: 0, units: [], maxLevel: 1, lang: 'en', challengeTimer: 60, enemySquad: [], selectedUnitIds: [], paused: false, settingsOpen: false };
+    let gameState = { mode: 'MERGE', coins: 0, units: [], maxLevel: 1, lang: detectLanguageEarly(), challengeTimer: 60, enemySquad: [], selectedUnitIds: [], paused: false, settingsOpen: false };
     let battleState = { playerTeam: [], enemyTeam: [], projectiles: [], phase: 'INIT', phaseTimer: 0, deadUnitIds: [] };
     let renderState = { slots: [], effects: [], floatingTexts: [], uiButtons: [], stars: [] };
 
@@ -583,11 +641,16 @@
     function gameLoop(ts) {
         if (!gameState.paused) {
             if (!lastTime) lastTime = ts; const dt = (ts - lastTime) / 1000; lastTime = ts;
-            if (gameState.mode === 'MERGE') { gameState.challengeTimer -= dt; if (gameState.challengeTimer <= 0) openChallenge(); }
+            if (gameState.mode === 'MERGE') { 
+                gameState.challengeTimer -= dt; 
+                if (gameState.challengeTimer <= 0) openChallenge();
+                
+                // Проверка таймера для рекламы (если игрок 3 минуты просто играет)
+                yandexManager.checkAutoAd(); 
+            }
             else if (gameState.mode === 'BATTLE') { updateBattle(dt); }
             render();
         } else {
-            // Even if paused, redraw once to prevent black screen if stuck
             render();
         }
         requestAnimationFrame(gameLoop);
@@ -605,12 +668,16 @@
         document.getElementById('chalName').innerText = name;
         document.getElementById('challengeOverlay').style.display = 'flex';
     }
+    
     document.getElementById('btnDecline').onclick = () => {
-        if (Math.random() > 0.7) yandexManager.showInterstitial();
+        // При отклонении - ВСЕГДА пытаемся показать рекламу (если прошел таймер)
+        yandexManager.showInterstitial();
+        
         gameState.challengeTimer = CONFIG.BATTLE_INTERVAL_MIN + Math.random() * 15;
         gameState.mode = 'MERGE';
         document.getElementById('challengeOverlay').style.display = 'none';
     };
+    
     document.getElementById('btnAccept').onclick = () => { document.getElementById('challengeOverlay').style.display = 'none'; openSetup(); };
 
     function openSetup() {
@@ -737,6 +804,7 @@
     }
     document.getElementById('continueBtn').onclick = () => {
         document.getElementById('battleResultOverlay').style.display = 'none';
+        // После боя - всегда пытаемся показать рекламу
         yandexManager.showInterstitial(() => { gameState.challengeTimer = CONFIG.BATTLE_INTERVAL_MIN + Math.random() * 15; gameState.mode = 'MERGE'; resize(); });
     };
 
@@ -763,7 +831,6 @@
         if (r > 50) r = 50; // Cap max size
 
         // 1. SETTINGS (Top-Left Fixed Safe Area)
-        // Moved to 50,50 to avoid corner clipping
         const setX = 50;
         const setY = 50;
         
@@ -774,7 +841,6 @@
         const langBtn = { id:'lang', x: setX, y: setY + r * 4.4, r: r * 0.7, color:'#4488FF', visible: gameState.settingsOpen };
 
         // 2. RIGHT-SIDE ACTION BAR (Vertical Stack)
-        // Fixed X coordinate to clear edge gestures
         const actionX = w - 70;
         const centerY = h / 2;
 
@@ -801,8 +867,11 @@
         ctx.scale(dpr, dpr);
 
         const isPortrait = h > w;
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-                         (navigator.maxTouchPoints > 0 && window.matchMedia("(hover: none)").matches);
+        
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const hasNoHover = window.matchMedia("(hover: none)").matches;
+        const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+        const isMobile = isMobileUA && (hasNoHover || hasCoarsePointer);
 
         const rotOverlay = document.getElementById('rotateOverlay');
         const rotMsg = document.getElementById('rotateMsg');
@@ -936,7 +1005,6 @@
                 drawCharacter(ctx, 0, 0, size, u.level); 
                 ctx.restore();
                 
-                // Unit Lvl Text (Localized)
                 const t = TRANSLATION[gameState.lang] || TRANSLATION.en;
                 drawStrokedText(`${t.LVL} ${u.level}`, u.x, u.y + size/2 + 15, Math.max(10, CONFIG.slotSize * 0.15), '#FFFFFF');
             });
@@ -964,7 +1032,6 @@
                     const cx = btn.x + 2; const cy = btn.y - btn.r * 0.2; const s = btn.r * 0.3;
                     ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx - s, cy + s); ctx.lineTo(cx + s, cy); ctx.fill();
 
-                    // Ad Text (Localized)
                     ctx.font = `900 ${btn.r * 0.35}px "Arial Black", Verdana`;
                     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
                     ctx.fillText(t.AD_BTN, btn.x, btn.y + btn.r * 0.4);
@@ -1151,18 +1218,13 @@
 
     // --- NEW ROBUST INPUT HANDLER ---
     
-    // Get mouse/touch position relative to canvas content
     function getEventPos(canvas, e) {
         const rect = canvas.getBoundingClientRect();
         const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
         const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
         
-        // Safety for empty touches array on touchend
-        if (clientX === undefined) return { x: 0, y: 0 }; // Fallback
+        if (clientX === undefined) return { x: 0, y: 0 }; 
 
-        // Map CSS coordinates to Canvas Logic Coordinates
-        // Since logic uses window.innerWidth/Height and canvas css matches it,
-        // and ctx.scale handles DPR, we just need the relative CSS position.
         return {
             x: clientX - rect.left,
             y: clientY - rect.top
@@ -1172,12 +1234,10 @@
     let dragTarget=null, dragSX=0, dragSY=0, dragOX=0, dragOY=0;
     
     function handleInputStart(e) {
-        // Normalize coordinates
         const pos = getEventPos(canvas, e);
         const x = pos.x;
         const y = pos.y;
 
-        // Visual Feedback for debugging (White ripple)
         renderState.effects.push({x: x, y: y, life: 10, color: 'rgba(255, 255, 255, 0.5)'});
 
         soundManager.checkContext();
@@ -1188,12 +1248,10 @@
             }
         }
 
-        // Safety fallback
         if (!gameState.mode) gameState.mode = 'MERGE';
         
         if (gameState.mode !== 'MERGE') return;
         
-        // Force settings visibility update just in case
         const muteBtn = renderState.uiButtons.find(b => b.id === 'mute');
         const langBtn = renderState.uiButtons.find(b => b.id === 'lang');
         if(muteBtn) muteBtn.visible = gameState.settingsOpen;
@@ -1203,7 +1261,6 @@
         for (let btn of renderState.uiButtons) {
             if (!btn.visible) continue;
             
-            // Increased hit radius by 20% for easier touching
             const hitRadius = btn.r * 1.2;
 
             if (Math.hypot(x - btn.x, y - btn.y) <= hitRadius) {
@@ -1211,7 +1268,6 @@
                 
                 if(btn.id === 'settings') {
                     gameState.settingsOpen = !gameState.settingsOpen;
-                    // Re-update visibility immediately for next frame
                     const m = renderState.uiButtons.find(b => b.id === 'mute');
                     const l = renderState.uiButtons.find(b => b.id === 'lang');
                     if(m) m.visible = gameState.settingsOpen;
@@ -1229,14 +1285,13 @@
                 }
                 else if(btn.id==='mute') soundManager.setMute(!soundManager.muted);
                 else if(btn.id==='lang') { gameState.lang = gameState.lang === 'ru' ? 'en' : 'ru'; updateDomTexts(); }
-                return; // Stop checking if button hit
+                return; 
             }
         }
         
-        // 2. Check Units (Reverse order for Z-index)
+        // 2. Check Units
         for (let i = gameState.units.length - 1; i >= 0; i--) { 
             const u = gameState.units[i]; 
-            // Safety check for unit position
             if (u.x === undefined || u.y === undefined) continue;
 
             if (Math.hypot(x - u.x, y - u.y) < (CONFIG.slotSize/2 + 10)) { 
@@ -1246,7 +1301,6 @@
                 dragSY=y; 
                 dragOX=x-u.x; 
                 dragOY=y-u.y; 
-                // Reorder for rendering on top
                 gameState.units.splice(i, 1); 
                 gameState.units.push(u); 
                 return; 
@@ -1267,14 +1321,6 @@
 
     function handleInputEnd(e) {
         if (dragTarget) {
-            // End coordinates are tricky in touchend, use last known or drag target pos
-            // For click logic, we rely on start position vs current position
-            // But 'e' in touchend has no coordinates for the ended touch.
-            // We use the dragTarget.x/y which updated in Move.
-            
-            // Re-calculate visual position based on dragTarget.x
-            // Or calculate simple distance if it was a tap
-            
             const wasTap = !dragTarget.isDragging;
 
             if (wasTap) {
@@ -1291,7 +1337,6 @@
                 ret(dragTarget);
             } else {
                 dragTarget.isDragging = false; 
-                // Find slot at dropped position
                 const realSlot = renderState.slots.find(s => 
                     dragTarget.x >= s.x && 
                     dragTarget.x <= s.x + s.width && 
@@ -1334,21 +1379,22 @@
     window.addEventListener('mousemove', handleInputMove);
     window.addEventListener('mouseup', handleInputEnd);
 
+    // Enhanced mobile touch handling with additional selection prevention
     canvas.addEventListener('touchstart', (e) => {
-        // e.preventDefault(); // Stop mouse emulation - handled globally in body? 
-        // We set passive: false to allow preventDefault if needed, but for UI feedback let's just run logic.
-        // Actually, preventing default on canvas is good to stop scrolling.
         if(e.cancelable) e.preventDefault();
+        e.stopPropagation();
         handleInputStart(e);
     }, {passive: false});
 
     canvas.addEventListener('touchmove', (e) => {
         if(e.cancelable) e.preventDefault();
+        e.stopPropagation();
         handleInputMove(e);
     }, {passive: false});
 
     canvas.addEventListener('touchend', (e) => {
         if(e.cancelable) e.preventDefault();
+        e.stopPropagation();
         handleInputEnd(e);
     }, {passive: false});
 
@@ -1363,10 +1409,9 @@
             const occ = gameState.units.map(u=>u.slotIndex); const free = renderState.slots.filter(s=>!occ.includes(s.index));
             if(free.length) { gameState.coins -= cost; const sl = free[Math.floor(Math.random()*free.length)]; gameState.units.push({id: Date.now()+Math.random(), level: s.level, slotIndex: sl.index, x: sl.x+sl.width/2, y: sl.y+sl.height/2, isDragging: false, animScale: 0.1}); soundManager.playBuy(); saveGame(); }
         } else {
-            // Show NO MONEY toast
+            const msg = TRANSLATION[gameState.lang] ? TRANSLATION[gameState.lang].NO_MONEY : "No Money";
             const w = canvas.width / window.devicePixelRatio;
             const h = canvas.height / window.devicePixelRatio;
-            const msg = TRANSLATION[gameState.lang] ? TRANSLATION[gameState.lang].NO_MONEY : "No Money";
             spawnFloatingText(w / 2, h / 2, msg, '#FF5555', 24);
         }
     }
@@ -1404,6 +1449,22 @@
 
     if (!CanvasRenderingContext2D.prototype.roundRect) { CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) { if (w<2*r) r=w/2; if(h<2*r) r=h/2; this.beginPath(); this.moveTo(x+r, y); this.arcTo(x+w, y, x+w, y+h, r); this.arcTo(x+w, y+h, x, y+h, r); this.arcTo(x+w, y+h, x, y+h, r); this.arcTo(x, y+h, x, y, r); this.arcTo(x, y, x+w, y, r); this.closePath(); return this; }; }
 
+    document.addEventListener('DOMContentLoaded', () => {
+        updateDomTexts();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (soundManager.ctx && soundManager.ctx.state === 'running') {
+                soundManager.ctx.suspend();
+            }
+        } else {
+            if (soundManager.ctx && soundManager.ctx.state === 'suspended' && !soundManager.muted) {
+                soundManager.ctx.resume();
+            }
+        }
+    });
+
     // --- MAIN INITIALIZATION SEQUENCE ---
     window.onload = async () => {
         await yandexManager.init();
@@ -1411,12 +1472,16 @@
         if(!gameState.units.length) gameState.units.push({id:Date.now(),level:1,slotIndex:0,x:0,y:0,isDragging:false,animScale:1});
         
         window.addEventListener('resize', resize);
-        resize(); // Initial smart layout calc
+        resize(); 
         updateDomTexts();
         
         document.getElementById('loadingOverlay').style.display = 'none';
-        yandexManager.notifyGameReady();
-        yandexManager.gameplayStart();
+        
+        requestAnimationFrame(() => {
+            yandexManager.notifyGameReady();
+            yandexManager.gameplayStart();
+        });
+        
         requestAnimationFrame(gameLoop);
     };
 </script>
