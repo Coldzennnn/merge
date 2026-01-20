@@ -498,7 +498,10 @@
             CONTINUE: "CONTINUE",
             // Floating Text
             NO_MONEY: "Not enough money!",
-            MAX_LVL: "Max Level!"
+            MAX_LVL: "Max Level!",
+            // New Keys
+            CRIT: "CRIT!",
+            UNITS_LOST: "units"
         },
         ru: {
             LOADING: "ЗАГРУЗКА...",
@@ -529,7 +532,10 @@
             CONTINUE: "ДАЛЕЕ",
             // Floating Text
             NO_MONEY: "Мало денег!",
-            MAX_LVL: "Макс. уровень!"
+            MAX_LVL: "Макс. уровень!",
+            // New Keys
+            CRIT: "КРИТ!",
+            UNITS_LOST: "ед."
         }
     };
 
@@ -721,7 +727,7 @@
         const deadBlock = document.getElementById('deadHeroesBlock');
         if (battleState.deadUnitIds.length > 0) {
             deadBlock.style.display = 'block'; gameState.units = gameState.units.filter(u => !battleState.deadUnitIds.includes(u.id));
-            document.getElementById('deadListText').innerText = `-${battleState.deadUnitIds.length} units`;
+            document.getElementById('deadListText').innerText = `-${battleState.deadUnitIds.length} ${t.UNITS_LOST}`;
         } else { deadBlock.style.display = 'none'; }
         saveGame(); document.getElementById('battleResultOverlay').style.display = 'flex';
     }
@@ -747,25 +753,32 @@
 
     function updateUIButtons(w, h) {
         const minDim = Math.min(w, h);
-        const pad = Math.max(15, minDim * 0.04);
-        const setRadius = Math.max(20, minDim * 0.05); 
         
-        const settingsBtn = { id:'settings', x: pad + setRadius, y: pad + setRadius, r: setRadius, color:'#777', visible: true };
-        const muteBtn = { id:'mute', x: settingsBtn.x, y: settingsBtn.y + setRadius * 2.5, r: setRadius * 0.9, color:'#444', visible: gameState.settingsOpen };
-        const langBtn = { id:'lang', x: settingsBtn.x, y: settingsBtn.y + setRadius * 5.0, r: setRadius * 0.9, color:'#4488FF', visible: gameState.settingsOpen };
+        // Consistent Radius (~35-40px)
+        let r = Math.max(35, minDim * 0.06);
+        if (r > 50) r = 50; // Cap max size
 
-        let buyBtn, adBtn;
-        const actionBtnRadius = Math.max(30, minDim * 0.08); 
+        // 1. SETTINGS (Top-Left Fixed Safe Area)
+        // Moved to 50,50 to avoid corner clipping
+        const setX = 50;
+        const setY = 50;
+        
+        const settingsBtn = { id:'settings', x: setX, y: setY, r: r * 0.8, color:'#777', visible: true };
+        
+        // Fan out downwards from settings
+        const muteBtn = { id:'mute', x: setX, y: setY + r * 2.2, r: r * 0.7, color:'#444', visible: gameState.settingsOpen };
+        const langBtn = { id:'lang', x: setX, y: setY + r * 4.4, r: r * 0.7, color:'#4488FF', visible: gameState.settingsOpen };
 
-        if (layout.isPortrait) {
-            const btnY = h - actionBtnRadius - pad - 10;
-            adBtn = { id:'ad', x: w * 0.25, y: btnY, r: actionBtnRadius * 0.9, color:'#FFD700', visible: true };
-            buyBtn = { id:'buy', x: w * 0.75, y: btnY, r: actionBtnRadius * 1.1, color:'#4CAF50', visible: true };
-        } else {
-            const btnY = h / 2 + 30; 
-            adBtn = { id:'ad', x: pad + actionBtnRadius, y: btnY, r: actionBtnRadius * 0.8, color:'#FFD700', visible: true };
-            buyBtn = { id:'buy', x: w - pad - actionBtnRadius, y: btnY, r: actionBtnRadius, color:'#4CAF50', visible: true };
-        }
+        // 2. RIGHT-SIDE ACTION BAR (Vertical Stack)
+        // Fixed X coordinate to clear edge gestures
+        const actionX = w - 70;
+        const centerY = h / 2;
+
+        // Ad Button (Stacked Above Center)
+        const adBtn = { id:'ad', x: actionX, y: centerY - 60, r: r, color:'#FFD700', visible: true };
+
+        // Buy Unit Button (Stacked Below Center)
+        const buyBtn = { id:'buy', x: actionX, y: centerY + 60, r: r * 1.1, color:'#4CAF50', visible: true };
 
         renderState.uiButtons = [settingsBtn, muteBtn, langBtn, adBtn, buyBtn];
     }
@@ -1265,7 +1278,11 @@
                 const isCrit = Math.random() < 0.15;
                 if(isCrit) { inc *= 5; soundManager.playHit(); } else soundManager.playClick(); 
                 gameState.coins += inc;
-                spawnFloatingText(dragTarget.x, dragTarget.y - 30, `${isCrit?'CRIT! ':''}+${formatNumber(inc)}$`, isCrit?'#FF4500':'#4CAF50', isCrit?24:16); 
+                
+                const t = TRANSLATION[gameState.lang] || TRANSLATION.en;
+                const text = `${isCrit ? t.CRIT + ' ' : ''}+${formatNumber(inc)}$`;
+                spawnFloatingText(dragTarget.x, dragTarget.y - 30, text, isCrit?'#FF4500':'#4CAF50', isCrit?24:16); 
+                
                 dragTarget.animScale = 0.8; 
                 ret(dragTarget);
             } else {
